@@ -366,70 +366,65 @@ main {
 #editor {
   position: relative;
   overflow: auto;
-  background-color: #1c1b1b;
+  /* background-color: #1c1b1b; */
   /* border: 1px solid red; */
   /* display: flex; */
 
   /* border: 1px solid var(--color-sidebar-border, #ddd); */
   flex-direction: column;
   flex: 1;
+  min-height: 0;
 
   header {
     flex: 0;
   }
+}
 
-  .code-container {
-    width: max-content;
-    position: relative;
-  }
+#editor .code-container {
+  display: flex; /* Use flexbox for editor layout */
+  flex-direction: column;
+  flex: 1;
+  position: relative; /* Ensure absolute positioning works */
+  overflow: hidden; /* Prevent container overflow */
+  min-height: 0; /* Allow shrinking in flex container */
+}
 
-  .code-syntax,
-  .code-editor {
-    flex: 1 1 100%;
-    white-space: pre;
+#editor .code-syntax {
+   /* Let syntax take natural height based on content */
+   position: absolute; /* Overlay on top of textarea */
+   top: 0;
+   left: 0;
+   width: 100%;
+   height: 100%;
+   padding: 14px; /* Match textarea padding */
+   pointer-events: none; /* Allow clicks through to textarea */
+   /* overflow: auto; */ /* Allow scrolling if content overflows */
+   z-index: 1; /* Ensure it's above the textarea visually */
+   background-color: var(--code-editor-bg); /* Match background */
+   display: none;
+}
 
-    font-family: monospace;
-    font-feature-settings: normal;
-    font-kerning: auto;
-    font-optical-sizing: auto;
-    font-palette: normal;
-    font-size: 14px;
-    font-size-adjust: none;
-    font-stretch: 100%;
-    font-style: normal;
-    font-synthesis-small-caps: auto;
-    font-synthesis-style: auto;
-    font-synthesis-weight: auto;
-    font-variant-alternates: normal;
-    font-variant-caps: normal;
-    font-variant-east-asian: normal;
-    font-variant-emoji: normal;
-    font-variant-ligatures: normal;
-    font-variant-numeric: normal;
-    font-variant-position: normal;
-    font-variation-settings: normal;
-    font-weight: 400;
-    -webkit-font-smoothing: auto;
-  }
-  .code-syntax {
-    pointer-events: none;
-  }
-  .code-editor {
-    background: transparent;
-    color: transparent;
-    caret-color: var(--code-text);
-
-    display: flex;
-
-    position: absolute;
-    top: 0;
-    left: 0;
-;
-    flex: 1;
-    overflow: hidden;
-    width: -webkit-fill-available;
-    height: -webkit-fill-available;
-  }
+#editor .code-editor {
+  /* Let textarea fill remaining space */
+  flex: 1;
+  position: relative; /* Change from absolute */
+  width: 100%; /* Take full width */
+  height: 100%; /* Take full height */
+  overflow: auto; /* Allow scrolling */
+  z-index: 0; /* Below syntax highlighting */
+  background: transparent; /* Make background transparent */
+  /* color: transparent; */ /* Hide text, show caret */
+  color: var(--code-editor-text);
+  caret-color: var(--code-editor-text);
+  padding: 14px; /* Consistent padding */
+  margin: 0; /* Reset margin */
+  border: none; /* Reset border */
+  resize: none; /* Disable resize */
+  outline: none; /* Disable outline */
+  white-space: pre; /* Preserve whitespace */
+  font-family: monospace; /* Match font */
+  font-size: 14px; /* Match font */
+  line-height: inherit; /* Inherit line height */
 }
 
 
@@ -443,6 +438,8 @@ main {
   border-radius: 18px;
   max-width: 85%;
   word-wrap: break-word;
+  position: relative; /* Needed for absolute positioning of active indicator if desired */
+  transition: background-color 0.3s ease; /* Smooth transition for active highlight */
 
   .thinking {
     font-style: normal;
@@ -458,6 +455,47 @@ main {
   }
 }
 
+.load-version-button, .improve-button {
+  display: inline-flex; /* Use flex for icon alignment */
+  align-items: center;
+  gap: 5px; /* Space between icon and text */
+  background: var(--color-bg3); /* Use a subtle background */
+  color: var(--color-text3);
+  border: 1px solid var(--color-sidebar-border);
+  border-radius: 12px;
+  padding: 4px 8px;
+  margin-top: 8px; /* Space above the button */
+  cursor: pointer;
+  font-size: 0.85em;
+  transition: background-color 0.2s, border-color 0.2s;
+  align-self: flex-start; /* Align button to the start within the turn */
+}
+
+.load-version-button:hover, .improve-button:hover {
+  background-color: var(--color-accent);
+  color: var(--color-accent-text);
+  border-color: var(--color-accent);
+}
+
+.load-version-button svg {
+  /* Icon size already set inline */
+}
+
+/* Highlight the message turn corresponding to the currently loaded code */
+.active-code-version {
+  background-color: var(--color-bg3); /* Or a more distinct highlight color */
+  /* Add a border or outline if desired */
+   /* outline: 2px solid var(--color-accent);
+   outline-offset: 2px; */
+}
+
+.needs-reload-indicator {
+  color: orange; /* Or choose another indicator color */
+  font-weight: bold;
+  margin-left: 5px;
+  display: inline-block;
+  vertical-align: middle; /* Align with text */
+}
 
 .role-user {
     background-color: var(--color-accent);
@@ -468,6 +506,11 @@ main {
     details {
       display: none;
     }
+}
+
+.role-user .load-version-button {
+  /* User messages won't have this button, but just in case */
+  display: none;
 }
 
 .role-assistant {
@@ -487,6 +530,16 @@ main {
   details {
     display: none;
   }
+}
+
+.role-system-ask .improve-button {
+  align-self: flex-start; /* Override default if needed */
+  background: var(--color-accent); /* Match user button style */
+  color: var(--color-accent-text);
+  border: none;
+}
+.role-system-ask .improve-button:hover {
+  background: var(--color-accent2);
 }
 
 .role-error {
@@ -553,17 +606,6 @@ canvas {
 
 }
 
-#editor textarea {
-  background-color: var(--code-editor-bg);
-  color: var(--code-editor-text);
-  padding: 14px;
-
-  position: absolute;
-  top: 0;
-  left: 0;
-
-}
-
 .preview-iframe {
   width: 100%;
   height: 100%;
@@ -574,7 +616,7 @@ canvas {
   padding: 0;
   background-color: transparent;
   display: flex;
-  flex: 1;
+  flex: 1;  
 }
 
 .button-label {
@@ -784,3 +826,4 @@ code.hljs {
   /* purposely ignored */
 
 }
+

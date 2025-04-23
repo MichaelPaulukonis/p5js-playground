@@ -1,15 +1,17 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
-*/
+ */
 /* tslint:disable */
-import {html, LitElement} from 'lit';
-import {customElement, query, state} from 'lit/decorators.js';
+import { html, LitElement } from 'lit'
+import { customElement, query, state } from 'lit/decorators.js'
 // tslint:disable-next-line:ban-malformed-import-paths
-import hljs from 'highlight.js';
-import {classMap} from 'lit/directives/class-map.js';
-import {Marked} from 'marked';
-import {markedHighlight} from 'marked-highlight';
+import hljs from 'highlight.js'
+import { classMap } from 'lit/directives/class-map.js'
+import { map } from 'lit/directives/map.js'
+import { unsafeHTML } from 'lit/directives/unsafe-html.js'
+import { Marked } from 'marked'
+import { markedHighlight } from 'marked-highlight'
 
 /** Markdown formatting function with syntax hilighting */
 export const marked = new Marked(
@@ -17,12 +19,12 @@ export const marked = new Marked(
     async: true,
     emptyLangClass: 'hljs',
     langPrefix: 'hljs language-',
-    highlight(code, lang, info) {
-      const language = hljs.getLanguage(lang) ? lang : 'plaintext';
-      return hljs.highlight(code, {language}).value;
-    },
-  }),
-);
+    highlight (code, lang, info) {
+      const language = hljs.getLanguage(lang) ? lang : 'plaintext'
+      return hljs.highlight(code, { language }).value
+    }
+  })
+)
 
 const ICON_BUSY = html`<svg
   class="rotating"
@@ -30,22 +32,37 @@ const ICON_BUSY = html`<svg
   height="24px"
   viewBox="0 -960 960 960"
   width="24px"
-  fill="currentColor">
+  fill="currentColor"
+>
   <path
-    d="M480-80q-82 0-155-31.5t-127.5-86Q143-252 111.5-325T80-480q0-83 31.5-155.5t86-127Q252-817 325-848.5T480-880q17 0 28.5 11.5T520-840q0 17-11.5 28.5T480-800q-133 0-226.5 93.5T160-480q0 133 93.5 226.5T480-160q133 0 226.5-93.5T800-480q0-17 11.5-28.5T840-520q17 0 28.5 11.5T880-480q0 82-31.5 155t-86 127.5q-54.5 54.5-127 86T480-80Z" />
-</svg>`;
+    d="M480-80q-82 0-155-31.5t-127.5-86Q143-252 111.5-325T80-480q0-83 31.5-155.5t86-127Q252-817 325-848.5T480-880q17 0 28.5 11.5T520-840q0 17-11.5 28.5T480-800q-133 0-226.5 93.5T160-480q0 133 93.5 226.5T480-160q133 0 226.5-93.5T800-480q0-17 11.5-28.5T840-520q17 0 28.5 11.5T880-480q0 82-31.5 155t-86 127.5q-54.5 54.5-127 86T480-80Z"
+  />
+</svg>`
 const ICON_EDIT = html`<svg
   xmlns="http://www.w3.org/2000/svg"
   height="16px"
   viewBox="0 -960 960 960"
   width="16px"
-  fill="currentColor">
+  fill="currentColor"
+>
   <path
-    d="M120-120v-170l528-527q12-11 26.5-17t30.5-6q16 0 31 6t26 18l55 56q12 11 17.5 26t5.5 30q0 16-5.5 30.5T817-647L290-120H120Zm584-528 56-56-56-56-56 56 56 56Z" />
-</svg>`;
+    d="M120-120v-170l528-527q12-11 26.5-17t30.5-6q16 0 31 6t26 18l55 56q12 11 17.5 26t5.5 30q0 16-5.5 30.5T817-647L290-120H120Zm584-528 56-56-56-56-56 56 56 56Z"
+  />
+</svg>`
+const ICON_LOAD = html`<svg
+  xmlns="http://www.w3.org/2000/svg"
+  height="16px"
+  viewBox="0 -960 960 960"
+  width="16px"
+  fill="currentColor"
+>
+  <path
+    d="M480-320 280-520l56-58 104 104v-326h80v326l104-104 56 58-200 200ZM240-80q-33 0-56.5-23.5T160-160v-640q0-33 23.5-56.5T240-880h320l240 240v480q0 33-23.5 56.5T720-80H240Z"
+  />
+</svg>`
 
 const p5jsCdnUrl =
-  'https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.3/p5.min.js';
+  'https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.3/p5.min.js'
 
 /**
  * Chat state enum to manage the current state of the chat interface.
@@ -54,7 +71,7 @@ export enum ChatState {
   IDLE,
   GENERATING,
   THINKING,
-  CODING,
+  CODING
 }
 
 /**
@@ -62,7 +79,7 @@ export enum ChatState {
  */
 enum ChatTab {
   GEMINI,
-  CODE,
+  CODE
 }
 
 /**
@@ -71,7 +88,17 @@ enum ChatTab {
 export enum ChatRole {
   USER,
   ASSISTANT,
-  SYSTEM,
+  SYSTEM
+}
+
+/** Interface for a message object */
+interface Message {
+  id: string
+  role: string // 'user', 'assistant', 'system-ask', 'error'
+  text: string // Rendered HTML content
+  thinkingText?: string // Rendered HTML thinking content (optional)
+  code?: string // Raw p5.js code string (optional)
+  isThinkingOpen?: boolean // State for the thinking details
 }
 
 /**
@@ -79,77 +106,83 @@ export enum ChatRole {
  */
 @customElement('gdm-playground')
 export class Playground extends LitElement {
-  @query('#anchor') anchor;
-  @query('#reloadTooltip') reloadTooltip;
-  private readonly codeSyntax = document.createElement('div');
+  @query('#anchor') anchor
+  @query('#reloadTooltip') reloadTooltip
+  private readonly codeSyntax = document.createElement('div')
 
-  @state() chatState = ChatState.IDLE;
-  @state() isRunning = true;
-  @state() selectedChatTab = ChatTab.GEMINI;
-  @state() inputMessage = '';
-  @state() code = '';
-  @state() messages: HTMLElement[] = [];
-  @state() codeHasChanged = true;
-  @state() codeNeedsReload = false;
+  @state() chatState = ChatState.IDLE
+  @state() isRunning = true
+  @state() selectedChatTab = ChatTab.GEMINI
+  @state() inputMessage = ''
+  @state() code = ''
+  @state() messages: Message[] = []
+  @state() codeHasChanged = true
+  @state() codeNeedsReload = false
+  @state() activeCodeVersionId: string | null = null // Track which version is loaded
 
-  private defaultCode = '';
+  private defaultCode = ''
   private readonly previewFrame: HTMLIFrameElement =
-    document.createElement('iframe');
-  private lastError = '';
-  private reportedError = false;
+    document.createElement('iframe')
+  private lastError = ''
+  private reportedError = false
 
-  sendMessageHandler?: CallableFunction;
-  resetHandler?: CallableFunction;
+  sendMessageHandler?: CallableFunction
+  resetHandler?: CallableFunction
 
-  constructor() {
-    super();
-    this.previewFrame.classList.add('preview-iframe');
-    this.previewFrame.setAttribute('allowTransparency', 'true');
+  constructor () {
+    super()
+    this.previewFrame.classList.add('preview-iframe')
+    this.previewFrame.setAttribute('allowTransparency', 'true')
 
-    this.codeSyntax.classList.add('code-syntax');
+    this.codeSyntax.classList.add('code-syntax')
 
     /* Receive message from the iframe in case any error occures. */
     window.addEventListener(
       'message',
-      (msg) => {
+      msg => {
         if (msg.data && typeof msg.data === 'string') {
           try {
-            const message = JSON.parse(msg.data).message;
-            this.runtimeErrorHandler(message);
+            const message = JSON.parse(msg.data).message
+            this.runtimeErrorHandler(message)
           } catch (e) {
-            console.error(e);
+            console.error(e)
           }
         }
       },
-      false,
-    );
+      false
+    )
   }
 
   /** Disable shadow DOM */
-  createRenderRoot() {
-    return this;
+  createRenderRoot () {
+    return this
   }
 
-  setDefaultCode(code: string) {
-    this.defaultCode = code;
+  setDefaultCode (code: string) {
+    this.defaultCode = code
   }
 
-  async setCode(code: string) {
+  async setCode(code: string, sourceMessageId: string | null = null) {
     this.code = code;
     this.runCode(code);
 
     this.codeSyntax.innerHTML = await marked.parse(
       '```javascript\n' + code + '\n```',
     );
+    // When code is set (either initially, by AI, or by loading a version),
+    // it's no longer "changed" relative to the preview.
+    this.codeHasChanged = false;
+    this.activeCodeVersionId = sourceMessageId; // Track the loaded version
+    this.requestUpdate(); // Ensure UI reflects the change
   }
 
-  setChatState(state: ChatState) {
-    this.chatState = state;
+  setChatState (state: ChatState) {
+    this.chatState = state
   }
 
-  runCode(code: string) {
-    this.reportedError = false;
-    this.lastError = '';
+  runCode (code: string) {
+    this.reportedError = false
+    this.lastError = ''
 
     const htmlContent = `
                 <!DOCTYPE html>
@@ -188,230 +221,332 @@ export class Playground extends LitElement {
                     </script>
                 </body>
                 </html>
-            `;
+            `
 
-    this.previewFrame.setAttribute('srcdoc', htmlContent);
-    this.codeNeedsReload = false;
+    this.previewFrame.setAttribute('srcdoc', htmlContent)
+    this.codeNeedsReload = false
   }
 
-  runtimeErrorHandler(errorMessage: string) {
-    this.reportedError = true;
+  runtimeErrorHandler (errorMessage: string) {
+    this.reportedError = true
 
     if (this.lastError !== errorMessage) {
-      this.addMessage('system-ask', errorMessage);
+      // Use the new addMessage structure
+      this.addMessage({
+        role: 'system-ask',
+        text: errorMessage, // Store raw error message
+        id: this.generateId()
+      })
     }
-    this.lastError = errorMessage;
+    this.lastError = errorMessage
   }
 
-  setInputField(message: string) {
-    this.inputMessage = message.trim();
+  setInputField (message: string) {
+    this.inputMessage = message.trim()
   }
 
-  addMessage(role: string, message: string) {
-    const div = document.createElement('div');
-    div.classList.add('turn');
-    div.classList.add(`role-${role.trim()}`);
-
-    const thinkingDetails = document.createElement('details');
-    thinkingDetails.classList.add('hidden');
-    const summary = document.createElement('summary');
-    summary.textContent = 'Thinking...';
-    thinkingDetails.classList.add('thinking');
-    thinkingDetails.setAttribute('open', 'true');
-    const thinking = document.createElement('div');
-    thinkingDetails.append(thinking);
-    div.append(thinkingDetails);
-    const text = document.createElement('div');
-    text.className = 'text';
-    text.textContent = message;
-    div.append(text);
-
-    if (role === 'system-ask') {
-      const btn = document.createElement('button');
-      btn.textContent = 'Improve';
-      div.appendChild(btn);
-      btn.addEventListener('click', () => {
-        // remove button
-        div.removeChild(btn);
-
-        // call model
-        this.sendMessageAction(message, 'SYSTEM');
-      });
+  // --- Refactored addMessage ---
+  addMessage (
+    messageData: Partial<Message> & { role: string; text: string }
+  ): string {
+    const id = messageData.id || this.generateId()
+    const newMessage: Message = {
+      isThinkingOpen: true, // Default thinking to open initially
+      ...messageData,
+      id // Ensure ID is set
     }
 
-    this.messages.push(div);
-    this.requestUpdate();
-
-    this.scrollToTheEnd();
-
-    return {thinking, text};
+    this.messages = [...this.messages, newMessage] // Use spread to trigger update
+    this.requestUpdate()
+    this.scrollToTheEnd()
+    return id // Return the ID so the caller can update this message later
   }
 
-  scrollToTheEnd() {
-    if (!this.anchor) return;
-    this.anchor.scrollIntoView({
-      behavior: 'smooth',
-      block: 'end',
-    });
+  // --- Helper to update specific message properties ---
+  updateMessage (id: string, updates: Partial<Message>) {
+    this.messages = this.messages.map(msg =>
+      msg.id === id ? { ...msg, ...updates } : msg
+    )
+    // No need to call requestUpdate explicitly here, state change handles it
+    this.scrollToTheEnd()
   }
 
-  async sendMessageAction(message?: string, role?: string) {
-    if (this.chatState !== ChatState.IDLE) return;
+  // --- Helper to generate unique IDs ---
+  private generateId (): string {
+    return Date.now().toString(36) + Math.random().toString(36).substring(2)
+  }
 
-    this.chatState = ChatState.GENERATING;
+  scrollToTheEnd () {
+    // Use requestAnimationFrame to ensure scrolling happens after DOM update
+    requestAnimationFrame(() => {
+      if (!this.anchor) return
+      this.anchor.scrollIntoView({
+        behavior: 'smooth',
+        block: 'end'
+      })
+    })
+  }
 
-    let msg = '';
+  async sendMessageAction (message?: string, role?: string) {
+    if (this.chatState !== ChatState.IDLE) return
+
+    this.chatState = ChatState.GENERATING
+
+    let msg = ''
     if (message) {
-      msg = message.trim();
+      msg = message.trim()
     } else {
       // get message and empty the field
-      msg = this.inputMessage.trim();
-      this.inputMessage = '';
+      msg = this.inputMessage.trim()
+      this.inputMessage = ''
     }
 
-    if (msg.length === 0) {
-      this.chatState = ChatState.IDLE;
-      return;
+    if (msg.length === 0 && !(role && role.toUpperCase() === 'SYSTEM')) {
+      // Allow system messages even if empty visually
+      this.chatState = ChatState.IDLE
+      return
     }
 
-    const msgRole = role ? role.toLowerCase() : 'user';
+    const msgRole = role ? role.toLowerCase() : 'user'
 
+    // Add user message using the new structure
     if (msgRole === 'user' && msg) {
-      this.addMessage(msgRole, msg);
+      this.addMessage({ role: msgRole, text: msg, id: this.generateId() })
     }
+    // System messages are added directly where needed (e.g., runtimeErrorHandler)
+    // or passed through the handler below.
 
     if (this.sendMessageHandler) {
+      // Pass the raw message text, role, code, and changed status
       await this.sendMessageHandler(
         msg,
         msgRole,
         this.code,
-        this.codeHasChanged,
-      );
-      this.codeHasChanged = false;
+        this.codeHasChanged
+      )
+      // Code sent to AI is now considered "synced" until edited again
+      // Note: setCode called by the handler will also set this to false.
+      // this.codeHasChanged = false;
     }
 
-    this.chatState = ChatState.IDLE;
+    this.chatState = ChatState.IDLE
   }
 
-  private async playAction() {
-    if (this.isRunning) return;
+  private async playAction () {
+    if (this.isRunning) return
     if (this.codeHasChanged) {
-      this.runCode(this.code);
+      this.runCode(this.code)
     }
-    this.isRunning = true;
-    this.previewFrame.contentWindow.postMessage('resume', '*');
+    this.isRunning = true
+    this.previewFrame.contentWindow.postMessage('resume', '*')
   }
 
-  private async stopAction() {
-    if (!this.isRunning) return;
-    this.isRunning = false;
-    this.previewFrame.contentWindow.postMessage('stop', '*');
+  private async stopAction () {
+    if (!this.isRunning) return
+    this.isRunning = false
+    this.previewFrame.contentWindow.postMessage('stop', '*')
   }
 
-  private async clearAction() {
-    this.setCode(this.defaultCode);
-    this.messages = [];
-    this.codeHasChanged = true;
+  private async clearAction () {
+    this.setCode(this.defaultCode)
+    this.messages = []
+    this.codeHasChanged = true
     if (this.resetHandler) {
-      this.resetHandler();
+      this.resetHandler()
     }
   }
 
-  private async codeEditedAction(code: string) {
-    if (this.chatState !== ChatState.IDLE) return;
+  private async codeEditedAction (newCode: string) {
+    if (this.chatState !== ChatState.IDLE) return
 
-    this.code = code;
-    this.codeHasChanged = true;
-    this.codeNeedsReload = true;
+    // Only update if the code actually changed
+    if (this.code === newCode) return
 
+    this.code = newCode // Update internal code state first
+    this.codeHasChanged = true
+    this.codeNeedsReload = true
+    this.activeCodeVersionId = null // Editing breaks link to previous version
+
+    // Update syntax highlighting asynchronously
     this.codeSyntax.innerHTML = await marked.parse(
-      '```javascript\n' + code + '\n```',
-    );
+      '```javascript\n' + newCode + '\n```'
+    )
+    this.requestUpdate() // Ensure UI reflects changes (like tooltip)
   }
 
-  private async inputKeyDownAction(e: KeyboardEvent) {
+  private async inputKeyDownAction (e: KeyboardEvent) {
     if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      e.stopPropagation();
-      this.sendMessageAction();
+      e.preventDefault()
+      e.stopPropagation()
+      this.sendMessageAction()
     }
   }
 
-  private async reloadCodeAction() {
-    this.runCode(this.code);
-    this.isRunning = true;
+  private async reloadCodeAction () {
+    // ... (keep existing reloadCodeAction logic)
+    this.runCode(this.code)
+    this.isRunning = true
+    this.codeNeedsReload = false // Reloaded, so flag is off
+    this.codeHasChanged = false // Code in editor now matches preview
+    this.requestUpdate()
   }
 
-  render() {
+  // --- New method to load a specific code version ---
+  private loadVersion (id: string) {
+    const message = this.messages.find(msg => msg.id === id)
+    if (message && message.code) {
+      console.log(`Loading code version from message ${id}`)
+      this.setCode(message.code, id) // Pass ID to track active version
+      // Optionally switch to the code tab
+      this.selectedChatTab = ChatTab.CODE
+    } else {
+      console.warn(`Could not find message or code for id: ${id}`)
+    }
+  }
+
+  // --- Method to handle thinking details toggle ---
+  private toggleThinking (id: string) {
+    this.messages = this.messages.map(msg =>
+      msg.id === id ? { ...msg, isThinkingOpen: !msg.isThinkingOpen } : msg
+    )
+  }
+
+  render () {
     return html`<div class="playground">
       <div class="sidebar">
         <div class="selector">
           <button
             id="geminiTab"
             class=${classMap({
-              'selected-tab': this.selectedChatTab === ChatTab.GEMINI,
+              'selected-tab': this.selectedChatTab === ChatTab.GEMINI
             })}
             @click=${() => {
-              this.selectedChatTab = ChatTab.GEMINI;
+              this.selectedChatTab = ChatTab.GEMINI
             }}>
             Gemini
           </button>
           <button
             id="codeTab"
             class=${classMap({
-              'selected-tab': this.selectedChatTab === ChatTab.CODE,
+              'selected-tab': this.selectedChatTab === ChatTab.CODE
             })}
             @click=${() => {
-              this.selectedChatTab = ChatTab.CODE;
+              this.selectedChatTab = ChatTab.CODE
             }}>
-            Code ${this.codeHasChanged ? ICON_EDIT : html``}
+            Code ${
+              this.codeHasChanged && !this.codeNeedsReload ? ICON_EDIT : html``
+            }
+             ${
+               this.codeNeedsReload
+                 ? html`<span class="needs-reload-indicator">*</span>`
+                 : html``
+             }
           </button>
         </div>
         <div
           id="chat"
           class=${classMap({
-            'tabcontent': true,
-            'showtab': this.selectedChatTab === ChatTab.GEMINI,
+            tabcontent: true,
+            showtab: this.selectedChatTab === ChatTab.GEMINI
           })}>
           <div class="chat-messages">
-            ${this.messages}
+            <!-- Render messages dynamically from the state array -->
+            ${map(
+              this.messages,
+              msg => html`
+                <div
+                  class=${classMap({ /* FIX 1: Combine static and dynamic classes */
+                    turn: true,
+                    [`role-${msg.role}`]: true, // Use computed property name for dynamic role class
+                    'active-code-version': msg.id === this.activeCodeVersionId
+                  })}
+                >
+                  ${msg.thinkingText
+                    ? html`
+                        <details
+                          class=${classMap({ /* FIX 2: Combine static and dynamic classes */
+                            thinking: true,
+                            hidden: !msg.thinkingText
+                          })}
+                          ?open=${msg.isThinkingOpen}
+                          @toggle=${() => this.toggleThinking(msg.id)}
+                        >
+                          <summary>Thinking...</summary>
+                          <div>${unsafeHTML(msg.thinkingText)}</div>
+                        </details>
+                      `
+                    : ''}
+                  <div class="text">${unsafeHTML(msg.text)}</div>
+                  ${msg.role === 'assistant' && msg.code
+                    ? html`
+                        <button
+                          class="load-version-button"
+                          @click=${() => this.loadVersion(msg.id)}
+                          title="Load this code version"
+                        >
+                          ${ICON_LOAD} Load Version
+                        </button>
+                      `
+                    : ''}
+                  ${msg.role === 'system-ask'
+                    ? html`
+                        <button
+                          class="improve-button"
+                          @click=${(e: Event) => {
+                            const button = e.target as HTMLButtonElement
+                            button.style.display = 'none'
+                            this.sendMessageAction(msg.text, 'SYSTEM')
+                          }}
+                        >
+                          Improve
+                        </button>
+                      `
+                    : ''}
+                </div>
+              `
+            )}
             <div id="anchor"></div>
           </div>
 
           <div class="footer">
             <div
               id="chatStatus"
-              class=${classMap({'hidden': this.chatState === ChatState.IDLE})}>
-              ${this.chatState === ChatState.GENERATING
-                ? html`${ICON_BUSY} Generating...`
-                : html``}
-              ${this.chatState === ChatState.THINKING
-                ? html`${ICON_BUSY} Thinking...`
-                : html``}
-              ${this.chatState === ChatState.CODING
-                ? html`${ICON_BUSY} Coding...`
-                : html``}
+              class=${classMap({ hidden: this.chatState === ChatState.IDLE })}>
+              ${
+                this.chatState === ChatState.GENERATING
+                  ? html`${ICON_BUSY} Generating...`
+                  : html``
+              }
+              ${
+                this.chatState === ChatState.THINKING
+                  ? html`${ICON_BUSY} Thinking...`
+                  : html``
+              }
+              ${
+                this.chatState === ChatState.CODING
+                  ? html`${ICON_BUSY} Coding...`
+                  : html``
+              }
             </div>
             <div id="inputArea">
               <textarea
                 id="messageInput"
                 .value=${this.inputMessage}
                 @input=${(e: InputEvent) => {
-                  // Update type cast here
-                  this.inputMessage = (e.target as HTMLTextAreaElement).value;
+                  this.inputMessage = (e.target as HTMLTextAreaElement).value
                 }}
                 @keydown=${(e: KeyboardEvent) => {
-                  this.inputKeyDownAction(e);
+                  this.inputKeyDownAction(e)
                 }}
                 placeholder="Type your message..."
                 autocomplete="off" ></textarea>
               <button
                 id="sendButton"
                 class=${classMap({
-                  'disabled': this.chatState !== ChatState.IDLE,
+                  disabled: this.chatState !== ChatState.IDLE
                 })}
                 @click=${() => {
-                  this.sendMessageAction();
+                  this.sendMessageAction()
                 }}>
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -428,26 +563,22 @@ export class Playground extends LitElement {
         <div
           id="editor"
           class=${classMap({
-            'tabcontent': true,
-            'showtab': this.selectedChatTab === ChatTab.CODE,
+            tabcontent: true,
+            showtab: this.selectedChatTab === ChatTab.CODE
           })}>
           <div class="code-container">
+             <!-- Render syntax highlighting based on current code -->
             ${this.codeSyntax}
             <textarea
               class="code-editor"
               contenteditable=""
-              .value=${this.code}
+              .value=${this.code} /* Bind directly to the code state */
               .readonly=${this.chatState !== ChatState.IDLE}
-              @keyup=${(e: KeyboardEvent) => {
-                const val = (e.target as HTMLTextAreaElement).value;
-                if (this.code !== val) {
-                  this.codeEditedAction(val);
-                  this.requestUpdate();
-                }
+              @input=${(e: InputEvent) => {
+                // Use input for immediate feedback
+                this.codeEditedAction((e.target as HTMLTextAreaElement).value)
               }}
-              @change=${(e: InputEvent) => {
-                this.codeEditedAction((e.target as HTMLTextAreaElement).value);
-              }}></textarea>
+             ></textarea>
           </div>
         </div>
       </div>
@@ -455,11 +586,14 @@ export class Playground extends LitElement {
       <div class="main-container">
         ${this.previewFrame}
         <div class="toolbar">
-          <button
+           <button
             id="reloadCode"
             @click=${() => {
-              this.reloadCodeAction();
-            }}>
+              this.reloadCodeAction()
+            }}
+            title=${
+              this.codeNeedsReload ? 'Reload code changes' : 'Reload sketch'
+            } >
             <svg
               xmlns="http://www.w3.org/2000/svg"
               height="30px"
@@ -471,20 +605,21 @@ export class Playground extends LitElement {
             </svg>
             <div class="button-label">
               <p>Reload</p>
-              <div
+               <div
                 id="reloadTooltip"
-                class="button-tooltip ${classMap({
-                  'show-tooltip': this.codeNeedsReload,
-                })}">
+                class=${classMap({ /* FIX 3: Combine static and dynamic classes */
+                  'button-tooltip': true,
+                  'show-tooltip': this.codeNeedsReload
+                })}>
                 <p>Reload code changes</p>
               </div>
             </div>
-          </button>
-          <button
+           </button>
+           <button
             id="runCode"
-            class=${classMap({'disabled': this.isRunning})}
+            class=${classMap({ disabled: this.isRunning })}
             @click=${() => {
-              this.playAction();
+              this.playAction()
             }}>
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -498,9 +633,9 @@ export class Playground extends LitElement {
           </button>
           <button
             id="stop"
-            class=${classMap({'disabled': !this.isRunning})}
+            class=${classMap({ disabled: !this.isRunning })}
             @click=${() => {
-              this.stopAction();
+              this.stopAction()
             }}>
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -515,7 +650,7 @@ export class Playground extends LitElement {
           <button
             id="clear"
             @click=${() => {
-              this.clearAction();
+              this.clearAction()
             }}>
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -532,6 +667,6 @@ export class Playground extends LitElement {
           </button>
         </div>
       </div>
-    </div>`;
+    </div>`
   }
 }

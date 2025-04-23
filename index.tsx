@@ -155,127 +155,190 @@ document.addEventListener('DOMContentLoaded', async (event) => {
   rootElement.appendChild(playground);
 
   playground.sendMessageHandler = async (
-    input: string,
-    role: string,
-    code: string,
-    codeHasChanged: boolean,
+    input: string, // Raw input text
+    role: string, // 'user' or 'system'
+    currentCode: string, // The code currently in the editor/preview
+    codeHasChanged: boolean, // Flag if editor code differs from last run/loaded
   ) => {
     console.log(
-      'sendMessageHandler',
-      input,
-      role,
-      code,
-      'codeHasChanged:',
-      codeHasChanged,
+      'sendMessageHandler received:',
+      { input, role, codeHasChanged }
     );
 
-    const {thinking, text} = playground.addMessage('assistant', '');
-    const message = [];
+    // Add a placeholder message for the assistant's response. Store its ID.
+    const assistantMessageId = playground.addMessage({
+        role: 'assistant',
+        text: '...', // Initial placeholder text
+        thinkingText: '', // Start with empty thinking text
+        isThinkingOpen: true,
+    });
 
+    const historyForAI = []; // Build history for the AI call
+
+    // Add previous messages from playground state (optional, but good for context)
+    // Note: This simple version doesn't send full history, adjust if needed.
+
+    // Add user message if code changed before sending
     if (role.toUpperCase() === 'USER' && codeHasChanged) {
-      message.push({
+      historyForAI.push({
         role: 'user',
-        text: 'I have updated the code: ```javascript\n' + code + '\n```',
+        // Send the *current* code from the editor
+        text: 'I have updated the code to:\n```javascript\n' + currentCode + '\n```\nNow, please: ' + input,
       });
-    }
-
-    if (role.toUpperCase() === 'SYSTEM') {
-      message.push({
-        role: 'user',
-        text: `Interpreter reported: ${input}. Is it possible to improve that?`,
-      });
+    } else if (role.toUpperCase() === 'SYSTEM') {
+       // System message (e.g., from runtime error)
+       historyForAI.push({
+         role: 'user', // Send system prompts as 'user' for the model
+         text: `The p5.js runtime reported an error: "${input}". Can you fix the current code?\nCurrent code:\n\`\`\`javascript\n${currentCode}\n\`\`\``,
+       });
     } else {
-      message.push({
-        role,
+      // Standard user message
+      historyForAI.push({
+        role: 'user', // Always send user input as 'user' role
         text: input,
       });
     }
 
-    playground.setChatState(ChatState.GENERATING);
 
-    text.innerHTML = '...';
+    playground.setChatState(ChatState.GENERATING); // Initial state
 
-    let newCode = '';
-    let thought = '';
+    let accumulatedText = '';
+    let accumulatedThinking = '';
+    let finalP5Code = ''; // Store the final extracted code
 
     try {
-      const res = await aiChat.sendMessageStream({message});
+      // Use sendMessageStream with the constructed history
+      const res = await aiChat.sendMessageStream({ message: historyForAI });
 
       for await (const chunk of res) {
+        let thinkingUpdated = false;
+        let textUpdated = false;
+
         for (const candidate of chunk.candidates ?? []) {
           for (const part of candidate.content.parts ?? []) {
             if (part.thought) {
               playground.setChatState(ChatState.THINKING);
-              thought += part.text;
-              thinking.innerHTML = await marked.parse(thought);
-              thinking.parentElement.classList.remove('hidden');
+              accumulatedThinking += part.text; // Append raw thinking text
+              thinkingUpdated = true;
             } else if (part.text) {
               playground.setChatState(ChatState.CODING);
-              newCode += part.text;
-              const p5Code = getCode(newCode);
-
-              // Remove the code block, it is available in the Code tab
-              const explanation = newCode.replace(
-                '```javascript' + p5Code + '```',
-                '',
-              );
-
-              text.innerHTML = await marked.parse(explanation);
+              accumulatedText += part.text; // Append raw response text
+              textUpdated = true;
             }
-            playground.scrollToTheEnd();
           }
         }
-      }
-    } catch (e: GoogleGenAI.ClientError) {
-      console.error('GenAI SDK Error:', e.message);
-      let message = e.message;
-      const splitPos = e.message.indexOf('{');
-      if (splitPos > -1) {
-        const msgJson = e.message.substring(splitPos);
-        try {
-          const sdkError = JSON.parse(msgJson);
-          if (sdkError.error) {
-            message = sdkError.error.message;
-            message = await marked.parse(message);
-          }
-        } catch (e) {
-          console.error('Unable to parse the error message:', e);
+
+        // Update the message object in the playground state after processing chunk parts
+        const updates: Partial<Playground['messages'][0]> = {};
+        if (thinkingUpdated) {
+            updates.thinkingText = await marked.parse(accumulatedThinking); // Render markdown
+            updates.isThinkingOpen = true; // Keep open while streaming
+        }
+        if (textUpdated) {
+            // Extract code *during* streaming to potentially update preview faster (optional)
+            // finalP5Code = getCode(accumulatedText);
+            // Remove code block for display in chat bubble
+            const explanation = accumulatedText.replace(/```javascript[\s\S]*?```/g, '*(Code block updated)*');
+            updates.text = await marked.parse(explanation || '...'); // Render markdown
+        }
+
+        if (thinkingUpdated || textUpdated) {
+            playground.updateMessage(assistantMessageId, updates);
         }
       }
-      const {text} = playground.addMessage('error', '');
-      text.innerHTML = message;
-    }
 
-    // close thinking block
-    thinking.parentElement.removeAttribute('open');
+      // --- Processing after stream finishes ---
+      finalP5Code = getCode(accumulatedText); // Get final code once stream is done
 
-    // If the answer was just code
-    if (text.innerHTML.trim().length === 0) {
-      text.innerHTML = 'Done';
-    }
+      // Final update to the message object
+      const finalUpdates: Partial<Playground['messages'][0]> = {
+          isThinkingOpen: false, // Close thinking details
+      };
 
-    const p5Code = getCode(newCode);
-    if (p5Code.trim().length > 0) {
-      playground.setCode(p5Code);
-    } else {
-      playground.addMessage('SYSTEM', 'There is no new code update.');
+      // Update text one last time, ensuring code block is replaced
+       const finalExplanation = accumulatedText.replace(/```javascript[\s\S]*?```/g, '*(Code block displayed in Code tab)*');
+       finalUpdates.text = await marked.parse(finalExplanation || 'Done.'); // Final rendered text
+
+      if (finalP5Code.trim().length > 0) {
+        finalUpdates.code = finalP5Code; // Store the raw code string
+        playground.setCode(finalP5Code, assistantMessageId); // Set code in editor/preview and link to this message
+      } else {
+         // If no code was generated, maybe add a system message?
+         // Or just leave the text as is.
+         console.log("Assistant response did not contain executable code.");
+         // Ensure the active version is cleared if no new code is set
+         if (playground.activeCodeVersionId === assistantMessageId) {
+             playground.activeCodeVersionId = null;
+         }
+      }
+
+      playground.updateMessage(assistantMessageId, finalUpdates);
+
+
+    } catch (e: GoogleGenAI.ClientError) { // Use specific type if available
+      console.error('GenAI SDK Error:', e);
+      let errorMessage = e.message || 'An unknown error occurred.';
+       // Attempt to parse detailed error (keep existing parsing logic)
+       const splitPos = errorMessage.indexOf('{');
+        if (splitPos > -1) {
+            const msgJson = errorMessage.substring(splitPos);
+            try {
+            const sdkError = JSON.parse(msgJson);
+            if (sdkError.error && sdkError.error.message) {
+                errorMessage = await marked.parse(sdkError.error.message);
+            } else {
+                 errorMessage = await marked.parse(errorMessage);
+            }
+            } catch (parseError) {
+            console.error('Unable to parse the error message JSON:', parseError);
+             errorMessage = await marked.parse(errorMessage); // Fallback to raw message
+            }
+        } else {
+             errorMessage = await marked.parse(errorMessage); // Fallback to raw message
+        }
+
+      // Update the placeholder message to show the error
+      playground.updateMessage(assistantMessageId, {
+          role: 'error', // Change role to error
+          text: errorMessage,
+          thinkingText: '', // Clear thinking
+          isThinkingOpen: false,
+      });
+
+    } finally {
+       playground.setChatState(ChatState.IDLE); // Ensure state is reset
+       playground.scrollToTheEnd(); // Scroll after final updates
     }
-    playground.setChatState(ChatState.IDLE);
   };
 
   playground.resetHandler = async () => {
-    aiChat = createAiChat();
+    aiChat = createAiChat(); // Reset AI chat session
+    console.log('Chat session reset.');
   };
 
+  // --- Initial Setup ---
   playground.setDefaultCode(EMPTY_CODE);
-  playground.addMessage(
-    'USER',
-    'make a simple animation of the background color',
-  );
-  playground.addMessage('ASSISTANT', 'Here you go!');
-  playground.setCode(STARTUP_CODE);
+
+  // Add initial messages using the new structure
+  const initialUserMsgId = playground.addMessage({
+      role: 'user',
+      text: 'make a simple animation of the background color',
+  });
+   const initialAssistantMsgId = playground.addMessage({
+      role: 'assistant',
+      text: 'Here you go! *(Code block displayed in Code tab)*', // Initial text
+      code: STARTUP_CODE, // Store the initial code with this message
+  });
+
+  // Set the initial code and link it to the assistant message
+  playground.setCode(STARTUP_CODE, initialAssistantMsgId);
+
+  // Set initial input field example
   playground.setInputField(
     'Start from scratch and ' +
       EXAMPLE_PROMPTS[Math.floor(Math.random() * EXAMPLE_PROMPTS.length)],
   );
+
+  // Initial scroll to end
+  playground.scrollToTheEnd();
 });
