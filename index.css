@@ -366,65 +366,70 @@ main {
 #editor {
   position: relative;
   overflow: auto;
-  /* background-color: #1c1b1b; */
+  background-color: #1c1b1b;
   /* border: 1px solid red; */
   /* display: flex; */
 
   /* border: 1px solid var(--color-sidebar-border, #ddd); */
   flex-direction: column;
   flex: 1;
-  min-height: 0;
 
   header {
     flex: 0;
   }
-}
 
-#editor .code-container {
-  display: flex; /* Use flexbox for editor layout */
-  flex-direction: column;
-  flex: 1;
-  position: relative; /* Ensure absolute positioning works */
-  overflow: hidden; /* Prevent container overflow */
-  min-height: 0; /* Allow shrinking in flex container */
-}
+  .code-container {
+    width: max-content;
+    position: relative;
+  }
 
-#editor .code-syntax {
-   /* Let syntax take natural height based on content */
-   position: absolute; /* Overlay on top of textarea */
-   top: 0;
-   left: 0;
-   width: 100%;
-   height: 100%;
-   padding: 14px; /* Match textarea padding */
-   pointer-events: none; /* Allow clicks through to textarea */
-   /* overflow: auto; */ /* Allow scrolling if content overflows */
-   z-index: 1; /* Ensure it's above the textarea visually */
-   background-color: var(--code-editor-bg); /* Match background */
-   display: none;
-}
+  .code-syntax,
+  .code-editor {
+    flex: 1 1 100%;
+    white-space: pre;
 
-#editor .code-editor {
-  /* Let textarea fill remaining space */
-  flex: 1;
-  position: relative; /* Change from absolute */
-  width: 100%; /* Take full width */
-  height: 100%; /* Take full height */
-  overflow: auto; /* Allow scrolling */
-  z-index: 0; /* Below syntax highlighting */
-  background: transparent; /* Make background transparent */
-  /* color: transparent; */ /* Hide text, show caret */
-  color: var(--code-editor-text);
-  caret-color: var(--code-editor-text);
-  padding: 14px; /* Consistent padding */
-  margin: 0; /* Reset margin */
-  border: none; /* Reset border */
-  resize: none; /* Disable resize */
-  outline: none; /* Disable outline */
-  white-space: pre; /* Preserve whitespace */
-  font-family: monospace; /* Match font */
-  font-size: 14px; /* Match font */
-  line-height: inherit; /* Inherit line height */
+    font-family: monospace;
+    font-feature-settings: normal;
+    font-kerning: auto;
+    font-optical-sizing: auto;
+    font-palette: normal;
+    font-size: 14px;
+    font-size-adjust: none;
+    font-stretch: 100%;
+    font-style: normal;
+    font-synthesis-small-caps: auto;
+    font-synthesis-style: auto;
+    font-synthesis-weight: auto;
+    font-variant-alternates: normal;
+    font-variant-caps: normal;
+    font-variant-east-asian: normal;
+    font-variant-emoji: normal;
+    font-variant-ligatures: normal;
+    font-variant-numeric: normal;
+    font-variant-position: normal;
+    font-variation-settings: normal;
+    font-weight: 400;
+    -webkit-font-smoothing: auto;
+  }
+  .code-syntax {
+    pointer-events: none;
+  }
+  .code-editor {
+    background: transparent;
+    color: transparent;
+    caret-color: var(--code-text);
+
+    display: flex;
+
+    position: absolute;
+    top: 0;
+    left: 0;
+;
+    flex: 1;
+    overflow: hidden;
+    width: -webkit-fill-available;
+    height: -webkit-fill-available;
+  }
 }
 
 
@@ -508,11 +513,6 @@ main {
     }
 }
 
-.role-user .load-version-button {
-  /* User messages won't have this button, but just in case */
-  display: none;
-}
-
 .role-assistant {
     background-color: var(--color-bg2);
     color: var(--color-text2);
@@ -540,6 +540,11 @@ main {
 }
 .role-system-ask .improve-button:hover {
   background: var(--color-accent2);
+}
+
+.role-user .load-version-button {
+  /* User messages won't have this button, but just in case */
+  display: none;
 }
 
 .role-error {
@@ -606,6 +611,17 @@ canvas {
 
 }
 
+#editor textarea {
+  background-color: var(--code-editor-bg);
+  color: var(--code-editor-text);
+  padding: 14px;
+
+  position: absolute;
+  top: 0;
+  left: 0;
+
+}
+
 .preview-iframe {
   width: 100%;
   height: 100%;
@@ -616,7 +632,7 @@ canvas {
   padding: 0;
   background-color: transparent;
   display: flex;
-  flex: 1;  
+  flex: 1;
 }
 
 .button-label {
@@ -826,4 +842,3 @@ code.hljs {
   /* purposely ignored */
 
 }
-
