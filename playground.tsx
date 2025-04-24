@@ -60,6 +60,7 @@ const ICON_LOAD = html`<svg
     d="M480-320 280-520l56-58 104 104v-326h80v326l104-104 56 58-200 200ZM240-80q-33 0-56.5-23.5T160-160v-640q0-33 23.5-56.5T240-880h320l240 240v480q0 33-23.5 56.5T720-80H240Z"
   />
 </svg>`
+const ICON_SNAPSHOT = html`<svg xmlns="http://www.w3.org/2000/svg" height="16px" viewBox="0 -960 960 960" width="16px" fill="currentColor"><path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-560H200v560Zm80-80h400q17 0 28.5-11.5T720-320v-320q0-17-11.5-28.5T680-680H280q-17 0-28.5 11.5T240-640v320q0 17 11.5 28.5T280-280Zm80-360h240q17 0 28.5-11.5T640-680v-80q0-17-11.5-28.5T600-800H360q-17 0-28.5 11.5T320-760v80q0 17 11.5 28.5T360-640ZM200-200v-560 560Z"/></svg>`;
 
 const p5jsCdnUrl =
   'https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.3/p5.min.js'
@@ -94,7 +95,7 @@ export enum ChatRole {
 /** Interface for a message object */
 interface Message {
   id: string
-  role: string // 'user', 'assistant', 'system-ask', 'error'
+  role: 'user' | 'assistant' | 'system-ask' | 'error' | 'manual-snapshot'
   text: string // Rendered HTML content
   thinkingText?: string // Rendered HTML thinking content (optional)
   code?: string // Raw p5.js code string (optional)
@@ -245,9 +246,8 @@ export class Playground extends LitElement {
     this.inputMessage = message.trim()
   }
 
-  // --- Refactored addMessage ---
   addMessage (
-    messageData: Partial<Message> & { role: string; text: string }
+    messageData: Partial<Message> & { role: Message['role']; text: string }
   ): string {
     const id = messageData.id || this.generateId()
     const newMessage: Message = {
@@ -290,6 +290,23 @@ export class Playground extends LitElement {
   async sendMessageAction (message?: string, role?: string) {
     if (this.chatState !== ChatState.IDLE) return
 
+    let manualSnapshotId: string | null = null;
+    console.log(this.codeHasChanged, role?.toLowerCase());
+    if (this.codeHasChanged && role?.toLowerCase() !== 'system') { // Don't snapshot before system prompts
+        console.log("Code has changed, creating manual snapshot...");
+        manualSnapshotId = this.addMessage({
+            role: 'manual-snapshot',
+            text: 'Snapshot of manual code edits.',
+            code: this.code, // Store the current code
+            id: this.generateId()
+        });
+        // Mark code as "not changed" relative to this new snapshot
+        this.codeHasChanged = false;
+        this.activeCodeVersionId = manualSnapshotId;
+        // No need to call setCode here, just update the state flags
+        this.requestUpdate(); // Ensure UI reflects the new snapshot and active state
+    }
+
     this.chatState = ChatState.GENERATING
 
     let msg = ''
@@ -301,20 +318,18 @@ export class Playground extends LitElement {
       this.inputMessage = ''
     }
 
-    if (msg.length === 0 && !(role && role.toUpperCase() === 'SYSTEM')) {
-      // Allow system messages even if empty visually
-      this.chatState = ChatState.IDLE
-      return
-    }
-
     const msgRole = role ? role.toLowerCase() : 'user'
 
-    // Add user message using the new structure
-    if (msgRole === 'user' && msg) {
-      this.addMessage({ role: msgRole, text: msg, id: this.generateId() })
+    // Only add user message if it's not empty
+    // System messages are handled differently (e.g., runtime errors add their own message)
+    // or passed directly to the handler below.
+    if (msgRole === 'user' && msg.length > 0) {
+        this.addMessage({ role: msgRole, text: msg, id: this.generateId() });
+    } else if (msgRole !== 'system' && msg.length === 0) {
+        // If no message and not a system action, stop processing
+        this.chatState = ChatState.IDLE;
+        return;
     }
-    // System messages are added directly where needed (e.g., runtimeErrorHandler)
-    // or passed through the handler below.
 
     if (this.sendMessageHandler) {
       // Pass the raw message text, role, code, and changed status
@@ -348,12 +363,22 @@ export class Playground extends LitElement {
   }
 
   private async clearAction () {
-    this.setCode(this.defaultCode)
-    this.messages = []
-    this.codeHasChanged = true
-    if (this.resetHandler) {
-      this.resetHandler()
+    // Add confirmation if code has changed
+    if (this.codeHasChanged && this.code !== this.defaultCode) {
+        const discardChanges = window.confirm(
+            'You have unsaved changes in the code editor. Resetting will discard them. Are you sure?'
+        );
+        if (!discardChanges) {
+            return; // Abort if user cancels
+        }
     }
+    this.setCode(this.defaultCode, null); // Reset code and active version
+    this.messages = [];
+    this.codeHasChanged = true; // Default code is now loaded, but treated as "changed" from nothing
+    if (this.resetHandler) {
+      this.resetHandler();
+    }
+    this.setInputField(''); // Clear input field as well
   }
 
   private async codeEditedAction (newCode: string) {
@@ -383,16 +408,27 @@ export class Playground extends LitElement {
   }
 
   private async reloadCodeAction () {
-    // ... (keep existing reloadCodeAction logic)
     this.runCode(this.code)
     this.isRunning = true
     this.codeNeedsReload = false // Reloaded, so flag is off
-    this.codeHasChanged = false // Code in editor now matches preview
     this.requestUpdate()
   }
 
-  // --- New method to load a specific code version ---
   private loadVersion (id: string) {
+    // Keep this check: User might edit *after* AI response/snapshot, then try to load an older version
+    if (this.codeHasChanged && this.activeCodeVersionId !== id) {
+      const discardChanges = window.confirm(
+        'You have unsaved changes in the code editor. Loading this version will discard your current edits. Are you sure you want to proceed?'
+      )
+      if (!discardChanges) {
+        // User clicked Cancel, so do nothing.
+        console.log('Load version cancelled by user.')
+        return
+      }
+      // User clicked OK, proceed with loading.
+    }
+
+    // Find the message and load the code (existing logic)
     const message = this.messages.find(msg => msg.id === id)
     if (message && message.code) {
       console.log(`Loading code version from message ${id}`)
@@ -461,7 +497,7 @@ export class Playground extends LitElement {
                     'active-code-version': msg.id === this.activeCodeVersionId
                   })}
                 >
-                  ${msg.thinkingText
+                  ${msg.thinkingText && msg.role === 'assistant'
                     ? html`
                         <details
                           class=${classMap({ /* FIX 2: Combine static and dynamic classes */
@@ -477,14 +513,14 @@ export class Playground extends LitElement {
                       `
                     : ''}
                   <div class="text">${unsafeHTML(msg.text)}</div>
-                  ${msg.role === 'assistant' && msg.code
+                  ${(msg.role === 'assistant' || msg.role === 'manual-snapshot') && msg.code
                     ? html`
                         <button
                           class="load-version-button"
                           @click=${() => this.loadVersion(msg.id)}
                           title="Load this code version"
                         >
-                          ${ICON_LOAD} Load Version
+                          ${msg.role === 'manual-snapshot' ? ICON_SNAPSHOT : ICON_LOAD} Load Version
                         </button>
                       `
                     : ''}

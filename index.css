@@ -520,6 +520,25 @@ main {
     border-bottom-left-radius: 4px;
 }
 
+.role-manual-snapshot {
+  background-color: var(--color-bg3); /* Use the slightly darker bg3 */
+  color: var(--color-text3);
+  align-self: flex-start; /* Align left like assistant */
+  border-bottom-left-radius: 4px;
+  border: 1px dashed var(--color-sidebar-border); /* Add a dashed border for distinction */
+
+  /* Hide thinking details if they somehow get added */
+  details.thinking {
+      display: none;
+  }
+
+  /* Style the text slightly differently */
+  .text {
+      font-style: italic;
+      opacity: 0.9;
+  }
+}
+
 .role-system-ask {
   background-color: transparent;
   color: var(--color-text2);
