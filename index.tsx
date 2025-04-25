@@ -22,6 +22,7 @@ When writing code:
 - Include basic error handling for common issues
 - Consider mobile/desktop compatibility
 - Be concise - avoid unnecessary code
+- do not use any import statements, as this is running in a browser
 
 ## ACCESSIBILITY CONSIDERATIONS
 - Provide text alternatives for visual elements when possible
