@@ -61,6 +61,7 @@ const ICON_LOAD = html`<svg
   />
 </svg>`
 const ICON_SNAPSHOT = html`<svg xmlns="http://www.w3.org/2000/svg" height="16px" viewBox="0 -960 960 960" width="16px" fill="currentColor"><path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-560H200v560Zm80-80h400q17 0 28.5-11.5T720-320v-320q0-17-11.5-28.5T680-680H280q-17 0-28.5 11.5T240-640v320q0 17 11.5 28.5T280-280Zm80-360h240q17 0 28.5-11.5T640-680v-80q0-17-11.5-28.5T600-800H360q-17 0-28.5 11.5T320-760v80q0 17 11.5 28.5T360-640ZM200-200v-560 560Z"/></svg>`;
+const ICON_DOWNLOAD = html`<svg xmlns="http://www.w3.org/2000/svg" height="30px" viewBox="0 -960 960 960" width="30px" fill="currentColor"><path d="M480-320 280-520l56-58 104 104v-326h80v326l104-104 56 58-200 200ZM240-160q-33 0-56.5-23.5T160-240v-120h80v120h480v-120h80v120q0 33-23.5 56.5T720-160H240Z"/></svg>`;
 
 const p5jsCdnUrl =
   'https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.3/p5.min.js'
@@ -199,17 +200,68 @@ export class Playground extends LitElement {
                     </style>
                     <script src="${p5jsCdnUrl}"></script>
                     <script>
+                      window.theSketchInstance = null;
                       window.addEventListener('message', (event) => {
-                          if (event.data === 'stop' && typeof noLoop === 'function') { noLoop(); console.log('Sketch stopped (noLoop)'); }
-                          else if (event.data === 'resume' && typeof loop === 'function') { loop(); console.log('Sketch resumed (loop)'); }
-                      }, false);
-                    </script>
+                        console.log('Message received from parent:', event.data);
+                        const instance = window.theSketchInstance;
+
+                        if (!instance) {
+                          console.warn('Sketch instance (window.theSketchInstance) not found yet.');
+                          // Attempt to grab it again, maybe it wasn't ready before?
+                          window.theSketchInstance = window.p5?.instance;
+                          if (!window.theSketchInstance) {
+                            console.warn('Still cannot find sketch instance.');
+                            return;
+                          }
+                          // If found now, retry using the newly found instance
+                          instance = window.theSketchInstance;
+                      }
+
+                      if (event.data === 'stop') {
+                          if (typeof instance.noLoop === 'function') {
+                              instance.noLoop();
+                              console.log('Sketch stopped (theSketchInstance.noLoop)');
+                          } else {
+                              console.warn('theSketchInstance.noLoop is not available.');
+                          }
+                      } else if (event.data === 'resume') {
+                          if (typeof instance.loop === 'function') {
+                              instance.loop();
+                              console.log('Sketch resumed (theSketchInstance.loop)');
+                          } else {
+                              console.warn('theSketchInstance.loop is not available.');
+                          }
+                      }
+                  }, false);
+                </script>
                 </head>
                 <body>
                     <script>
                         // Basic error handling within the iframe
                         try {
+                            // 3. Override p5 constructor BEFORE user code runs
+                            if (typeof window.p5 === 'function') {
+                                originalP5Constructor = window.p5; // Store the original
+
+                                window.p5 = function(...args) {
+                                    console.log('Overridden p5 constructor called.');
+                                    // Call the original constructor with the same arguments
+                                    const instance = new originalP5Constructor(...args);
+                                    // Capture the returned instance
+                                    window.theSketchInstance = instance;
+                                    console.log('p5 instance captured via constructor override:', window.theSketchInstance);
+                                    // Return the instance so the sketch initializes correctly
+                                    return instance;
+                                };
+                                // Copy static properties (like Vector, etc.) from original to wrapper
+                                Object.assign(window.p5, originalP5Constructor);
+                            } else {
+                                console.error("window.p5 not found before sketch execution. Cannot override constructor.");
+                            }
+
+                            // 4. User's code is injected here. It will call our overridden constructor.
                             ${code}
+
                         } catch (error) {
                             console.error("Error in sketch:", error);
                             parent.postMessage(
@@ -217,7 +269,17 @@ export class Playground extends LitElement {
                                 message: error.toString()
                               })
                             );
-                            document.body.innerHTML = '<pre class="console">Error: ' + error.message + '\\nCheck the browser console for details or ask Gemini to fix it.</pre>';
+                            // Display error in the iframe itself
+                            document.body.innerHTML = '<div style="padding: 20px; font-family: monospace; color: red; background: #fff0f0;">' +
+                                                      '<h3>Sketch Error</h3><pre>' + error.toString() + '</pre>' +
+                                                      '<p>Check the browser console for details or ask Gemini to fix it.</p>' +
+                                                      '</div>';
+                        } finally {
+                            // 5. Restore original p5 constructor (optional, but good practice)
+                            if (originalP5Constructor) {
+                                window.p5 = originalP5Constructor;
+                                console.log('Original p5 constructor restored.');
+                            }
                         }
                     </script>
                 </body>
@@ -440,11 +502,53 @@ export class Playground extends LitElement {
     }
   }
 
-  // --- Method to handle thinking details toggle ---
   private toggleThinking (id: string) {
     this.messages = this.messages.map(msg =>
       msg.id === id ? { ...msg, isThinkingOpen: !msg.isThinkingOpen } : msg
     )
+  }
+
+  private downloadCodeAction() {
+    const codeToDownload = this.code;
+    if (!codeToDownload) {
+        console.warn("No code to download.");
+        // Optionally show a message to the user
+        return;
+    }
+
+    // 1. Create Timestamp
+    const now = new Date();
+    const timestamp = now.getFullYear().toString() +
+                      (now.getMonth() + 1).toString().padStart(2, '0') +
+                      now.getDate().toString().padStart(2, '0') + '-' +
+                      now.getHours().toString().padStart(2, '0') +
+                      now.getMinutes().toString().padStart(2, '0') +
+                      now.getSeconds().toString().padStart(2, '0');
+
+    // 2. Create Filename
+    const filename = `p5js-sketch-${timestamp}.js`;
+
+    // 3. Create Blob
+    const blob = new Blob([codeToDownload], { type: 'text/javascript;charset=utf-8;' });
+
+    // 4. Create Object URL
+    const url = URL.createObjectURL(blob);
+
+    // 5. Create Temporary Link
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", filename);
+    link.style.visibility = 'hidden'; // Hide the link
+
+    // 6. Append, Click, Remove Link
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    // 7. Revoke Object URL (important for memory management)
+    URL.revokeObjectURL(url);
+
+    console.log(`Code downloaded as ${filename}`);
   }
 
   render () {
@@ -683,6 +787,17 @@ export class Playground extends LitElement {
                 d="M320-320h320v-320H320v320ZM480-80q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Z" />
             </svg>
           </button>
+
+          <button
+            id="downloadCode"
+            @click=${() => { this.downloadCodeAction(); }}
+            title="Download sketch code" >
+            ${ICON_DOWNLOAD}
+            <div class="button-label">
+              <p>Download</p>
+            </div>
+          </button>
+
           <button
             id="clear"
             @click=${() => {
