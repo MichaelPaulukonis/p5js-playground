@@ -64,7 +64,8 @@ const ICON_SNAPSHOT = html`<svg xmlns="http://www.w3.org/2000/svg" height="16px"
 const ICON_DOWNLOAD = html`<svg xmlns="http://www.w3.org/2000/svg" height="30px" viewBox="0 -960 960 960" width="30px" fill="currentColor"><path d="M480-320 280-520l56-58 104 104v-326h80v326l104-104 56 58-200 200ZM240-160q-33 0-56.5-23.5T160-240v-120h80v120h480v-120h80v120q0 33-23.5 56.5T720-160H240Z"/></svg>`;
 
 const p5jsCdnUrl =
-  'https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.3/p5.min.js'
+  'https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.3/p5.min.js'
+const p5soundCdnUrl = 'https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.3/addons/p5.sound.min.js'
 
 /**
  * Chat state enum to manage the current state of the chat interface.
@@ -199,6 +200,7 @@ export class Playground extends LitElement {
                         .console { position: absolute; bottom: 0; left: 0; width: 100%; background: rgba(0, 0, 0, 0.7); padding: 1em; margin: 0; color: red; font-family: monospace;}
                     </style>
                     <script src="${p5jsCdnUrl}"></script>
+                    <script src="${p5soundCdnUrl}"></script>
                     <script>
                       window.theSketchInstance = null;
                       window.addEventListener('message', (event) => {

@@ -4,6 +4,10 @@ This contains everything you need to run your app locally.
 
 Originally from <https://aistudio.google.com/apps/bundled/p5js_playground>
 
+see more demos @ https://github.com/googlecreativelab/gemini-demos/tree/main
+
+<https://github.com/google-gemini/aistudio-showcase/tree/main/src>
+
 ## Run Locally
 
 **Prerequisites:**  Node.js
